@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>kube-chaos-sim</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js"></script>
+</head>
+<body>
+    <header>
+        <h1>kube-chaos-sim</h1>
+        <p class="subtitle">Kubernetes Chaos Engineering Dashboard</p>
+    </header>
+
+    <main>
+        <div id="pod-grid">
+            <p class="loading">Loading pod data...</p>
+        </div>
+    </main>
+
+    <script>
+        // Auto-load SSE on page load
+        const eventSource = new EventSource('/events');
+        eventSource.addEventListener('datastar-patch-elements', (event) => {
+            // event.data contains the full data line(s)
+            // Format: "elements <html>"
+            const data = event.data;
+            if (data.startsWith('elements ')) {
+                const html = data.substring(9);
+                const podGrid = document.getElementById('pod-grid');
+                if (podGrid) {
+                    podGrid.outerHTML = html;
+                }
+            }
+        });
+        
+        eventSource.onerror = (err) => {
+            console.error('SSE error:', err);
+        };
+    </script>
+
+    <footer>
+        <p>Connected to kind cluster • 3 zones (ru-central1-a/b/d)</p>
+    </footer>
+</body>
+</html>
