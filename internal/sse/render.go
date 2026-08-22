@@ -25,11 +25,12 @@ func RenderPodGrid(pods []k8s.PodInfo) string {
 	b.WriteString(`<th>Name</th><th>Namespace</th><th>Status</th>`)
 	b.WriteString(`<th>Node</th><th>Zone</th><th>IP</th>`)
 	b.WriteString(`<th>Ready</th><th>Restarts</th><th>Age</th>`)
+	b.WriteString(`<th>Actions</th>`)
 	b.WriteString(`</tr></thead>`)
 	b.WriteString(`<tbody>`)
 
 	if len(pods) == 0 {
-		b.WriteString(`<tr><td colspan="9" class="empty">No pods found</td></tr>`)
+		b.WriteString(`<tr><td colspan="10" class="empty">No pods found</td></tr>`)
 	} else {
 		for _, p := range pods {
 			b.WriteString(renderPodRow(p))
@@ -58,6 +59,11 @@ func renderPodRow(p k8s.PodInfo) string {
 			`<td>%s</td>`+
 			`<td>%d</td>`+
 			`<td>%s</td>`+
+			`<td class="actions">`+
+				`<button class="btn-kill" data-on:click="@post('/api/chaos/kill-pod?podName=%s&namespace=%s')">Kill</button>`+
+				`<button class="btn-latency" data-on:click="@post('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=5')">+5s</button>`+
+				`<button class="btn-spike" data-on:click="@post('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=100')">Spike</button>`+
+			`</td>`+
 			`</tr>`,
 		cssClass,
 		html.EscapeString(p.Name),
@@ -70,6 +76,12 @@ func renderPodRow(p k8s.PodInfo) string {
 		readyStr,
 		p.RestartCount,
 		formatAge(p.Age),
+		html.EscapeString(p.Name),
+		html.EscapeString(p.Namespace),
+		html.EscapeString(p.Name),
+		html.EscapeString(p.Namespace),
+		html.EscapeString(p.Name),
+		html.EscapeString(p.Namespace),
 	)
 }
 
@@ -81,6 +93,8 @@ func statusToCSSClass(status string) string {
 		return "status-pending"
 	case "Terminating":
 		return "status-terminating"
+	case "Restarting":
+		return "status-restarting"
 	case "Failed", "CrashLoopBackOff", "ImagePullBackOff", "ErrImagePull", "Error":
 		return "status-error"
 	case "Succeeded":

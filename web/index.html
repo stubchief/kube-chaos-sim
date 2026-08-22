@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>kube-chaos-sim</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.2/bundles/datastar.js"></script>
+    <script type="module" src="/static/datastar.js"></script>
 </head>
 <body>
     <header>
@@ -17,31 +17,21 @@
         <div id="pod-grid">
             <p class="loading">Loading pod data...</p>
         </div>
-    </main>
-
-    <script>
-        // Auto-load SSE on page load
-        const eventSource = new EventSource('/events');
-        eventSource.addEventListener('datastar-patch-elements', (event) => {
-            // event.data contains the full data line(s)
-            // Format: "elements <html>"
-            const data = event.data;
-            if (data.startsWith('elements ')) {
-                const html = data.substring(9);
-                const podGrid = document.getElementById('pod-grid');
-                if (podGrid) {
-                    podGrid.outerHTML = html;
-                }
-            }
-        });
         
-        eventSource.onerror = (err) => {
-            console.error('SSE error:', err);
-        };
-    </script>
+        <!-- Test button to verify Datastar works -->
+        <button data-on:click="@get('/api/snapshot')" style="margin: 20px; padding: 10px;">
+            Test Load Pods
+        </button>
+    </main>
 
     <footer>
         <p>Connected to kind cluster • 3 zones (ru-central1-a/b/d)</p>
     </footer>
+
+    <!--
+        SSE connection for real-time pod updates.
+        Connects to /events endpoint which pushes updates when pod state changes.
+    -->
+    <div id="sse-bootstrap" data-init="@get('/events')"></div>
 </body>
 </html>

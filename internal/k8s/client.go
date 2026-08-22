@@ -62,6 +62,10 @@ func (c *Client) NodeInformer() coreinformers.NodeInformer {
 	return c.nodeInformer
 }
 
+func (c *Client) Clientset() kubernetes.Interface {
+	return c.clientset
+}
+
 func (c *Client) Run(ctx context.Context) {
 	c.factory.Start(ctx.Done())
 	log.Println("Waiting for informer caches to sync...")

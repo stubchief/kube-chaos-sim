@@ -21,6 +21,7 @@ type PodInfo struct {
 	RestartCount int32
 	Age          time.Time
 	Deleting     bool
+	LastRestart  time.Time
 }
 
 type Store struct {
@@ -134,6 +135,15 @@ func (s *Store) updatePod(pod *v1.Pod) {
 	info.Status = extractStatus(pod)
 	info.Ready, info.RestartCount = extractContainerInfo(pod)
 
+	// Track restart timing for transitional state
+	if oldPod, exists := s.pods[key]; exists {
+		if info.RestartCount > oldPod.RestartCount {
+			info.LastRestart = time.Now()
+		} else {
+			info.LastRestart = oldPod.LastRestart
+		}
+	}
+
 	s.pods[key] = info
 	s.mu.Unlock()
 
@@ -155,11 +165,25 @@ func extractStatus(pod *v1.Pod) string {
 		return "Terminating"
 	}
 
+	// Check for CrashLoopBackOff or other error states
 	for _, cs := range pod.Status.ContainerStatuses {
 		if cs.State.Waiting != nil {
 			reason := cs.State.Waiting.Reason
+			if reason == "CrashLoopBackOff" {
+				return "CrashLoopBackOff"
+			}
 			if reason != "" {
 				return reason
+			}
+		}
+	}
+
+	// Check if pod is restarting (not ready but was recently running)
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.RestartCount > 0 && !cs.Ready {
+			// Pod has restarted and is not ready yet
+			if cs.State.Running != nil || cs.State.Waiting != nil {
+				return "Restarting"
 			}
 		}
 	}

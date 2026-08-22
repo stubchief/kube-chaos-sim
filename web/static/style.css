@@ -107,6 +107,18 @@ footer {
     color: #d97706;
 }
 
+.status-restarting .badge,
+.badge.status-restarting {
+    background: #fff3cd;
+    color: #856404;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .status-error .badge,
 .badge.status-error {
     background: #f8d7da;
@@ -138,6 +150,10 @@ tr.status-terminating {
     border-left: 4px solid #fd7e14;
 }
 
+tr.status-restarting {
+    border-left: 4px solid #ffc107;
+}
+
 tr.status-error {
     border-left: 4px solid #dc3545;
 }
@@ -162,4 +178,65 @@ tr.status-unknown {
     text-align: center;
     padding: 3rem;
     color: #666;
+}
+
+/* Kill button */
+.btn-kill {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-kill:hover {
+    background: #c82333;
+}
+
+.btn-kill:active {
+    background: #bd2130;
+}
+
+.btn-latency {
+    background: #ffc107;
+    color: #333;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-left: 0.3rem;
+}
+
+.btn-latency:hover {
+    background: #e0a800;
+}
+
+.btn-spike {
+    background: #6f42c1;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-left: 0.3rem;
+}
+
+.btn-spike:hover {
+    background: #5a32a3;
+}
+
+td.actions {
+    white-space: nowrap;
 }
