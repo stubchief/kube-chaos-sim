@@ -14,15 +14,19 @@ type Hub struct {
 	mu       sync.RWMutex
 	clients  map[chan string]struct{}
 	snapshot func() []k8s.PodInfo
+	hpaSnapshot func() []k8s.HPAInfo
+	pdbSnapshot func() []k8s.PDBInfo
 
 	debounceMu    sync.Mutex
 	debounceTimer *time.Timer
 }
 
-func NewHub(snapshot func() []k8s.PodInfo) *Hub {
+func NewHub(snapshot func() []k8s.PodInfo, hpaSnapshot func() []k8s.HPAInfo, pdbSnapshot func() []k8s.PDBInfo) *Hub {
 	return &Hub{
 		clients:  make(map[chan string]struct{}),
 		snapshot: snapshot,
+		hpaSnapshot: hpaSnapshot,
+		pdbSnapshot: pdbSnapshot,
 	}
 }
 
@@ -72,8 +76,10 @@ func (h *Hub) Handler() http.HandlerFunc {
 		defer h.Unsubscribe(ch)
 
 		pods := h.snapshot()
-		log.Printf("Snapshot: %d pods", len(pods))
-		initialHTML := RenderPodGrid(pods)
+		hpas := h.hpaSnapshot()
+		pdbs := h.pdbSnapshot()
+		log.Printf("Snapshot: %d pods, %d HPAs, %d PDBs", len(pods), len(hpas), len(pdbs))
+		initialHTML := RenderPodGrid(pods) + RenderHPAPanel(hpas) + RenderPDBPanel(pdbs)
 		
 		if err := sse.PatchElements(initialHTML); err != nil {
 			log.Printf("Failed to send initial snapshot: %v", err)

@@ -240,3 +240,101 @@ tr.status-unknown {
 td.actions {
     white-space: nowrap;
 }
+
+/* Policy panels (HPA, PDB) */
+.policy-panel {
+    margin: 2rem 0;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.policy-panel h2 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.policy-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.policy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.policy-header h3 {
+    font-size: 1.2rem;
+    color: #34495e;
+}
+
+.policy-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat label {
+    font-size: 0.85rem;
+    color: #666;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.stat span {
+    font-size: 1rem;
+    color: #333;
+}
+
+.policy-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.policy-controls label {
+    font-size: 0.9rem;
+    color: #555;
+    font-weight: 600;
+}
+
+.policy-controls input[type="range"] {
+    width: 100%;
+    margin-bottom: 0.25rem;
+}
+
+.btn-apply {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 0.5rem;
+}
+
+.btn-apply:hover {
+    background: #0056b3;
+}
+
+.btn-apply:active {
+    background: #004085;
+}

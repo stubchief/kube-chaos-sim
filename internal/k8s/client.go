@@ -6,8 +6,10 @@ import (
 	"log"
 	"time"
 
+	autoscalinginformers "k8s.io/client-go/informers/autoscaling/v2"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
+	policyinformers "k8s.io/client-go/informers/policy/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -18,6 +20,8 @@ type Client struct {
 	factory      informers.SharedInformerFactory
 	podInformer  coreinformers.PodInformer
 	nodeInformer coreinformers.NodeInformer
+	hpaInformer  autoscalinginformers.HorizontalPodAutoscalerInformer
+	pdbInformer  policyinformers.PodDisruptionBudgetInformer
 }
 
 func NewClient(kubeconfig string) (*Client, error) {
@@ -51,6 +55,8 @@ func NewClient(kubeconfig string) (*Client, error) {
 		factory:      factory,
 		podInformer:  factory.Core().V1().Pods(),
 		nodeInformer: factory.Core().V1().Nodes(),
+		hpaInformer:  factory.Autoscaling().V2().HorizontalPodAutoscalers(),
+		pdbInformer:  factory.Policy().V1().PodDisruptionBudgets(),
 	}, nil
 }
 
@@ -60,6 +66,14 @@ func (c *Client) PodInformer() coreinformers.PodInformer {
 
 func (c *Client) NodeInformer() coreinformers.NodeInformer {
 	return c.nodeInformer
+}
+
+func (c *Client) HPAInformer() autoscalinginformers.HorizontalPodAutoscalerInformer {
+	return c.hpaInformer
+}
+
+func (c *Client) PDBInformer() policyinformers.PodDisruptionBudgetInformer {
+	return c.pdbInformer
 }
 
 func (c *Client) Clientset() kubernetes.Interface {

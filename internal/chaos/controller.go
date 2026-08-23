@@ -2,11 +2,13 @@ package chaos
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
 	"kube-chaos-sim/internal/k8s"
@@ -73,5 +75,70 @@ func (c *Controller) MemorySpike(ctx context.Context, podName, namespace string,
 	}
 	
 	log.Printf("Memory spike triggered in pod %s/%s, output: %s", namespace, podName, string(output))
+	return nil
+}
+
+// SetHPA patches an HPA to update min/max replicas and target CPU utilization.
+func (c *Controller) SetHPA(ctx context.Context, hpaName, namespace string, minReplicas, maxReplicas, targetCPU int32) error {
+	log.Printf("Updating HPA %s/%s: min=%d, max=%d, targetCPU=%d%%", namespace, hpaName, minReplicas, maxReplicas, targetCPU)
+
+	patch := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"minReplicas": minReplicas,
+			"maxReplicas": maxReplicas,
+			"metrics": []map[string]interface{}{
+				{
+					"type": "Resource",
+					"resource": map[string]interface{}{
+						"name": "cpu",
+						"target": map[string]interface{}{
+							"type":               "Utilization",
+							"averageUtilization": targetCPU,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("failed to marshal HPA patch: %w", err)
+	}
+
+	_, err = c.clientset.AutoscalingV2().HorizontalPodAutoscalers(namespace).Patch(
+		ctx, hpaName, types.MergePatchType, patchBytes, metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to patch HPA %s/%s: %w", namespace, hpaName, err)
+	}
+
+	log.Printf("Successfully updated HPA %s/%s", namespace, hpaName)
+	return nil
+}
+
+// SetPDB patches a PDB to update minAvailable.
+func (c *Controller) SetPDB(ctx context.Context, pdbName, namespace string, minAvailable int32) error {
+	log.Printf("Updating PDB %s/%s: minAvailable=%d", namespace, pdbName, minAvailable)
+
+	patch := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"minAvailable": minAvailable,
+		},
+	}
+
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("failed to marshal PDB patch: %w", err)
+	}
+
+	_, err = c.clientset.PolicyV1().PodDisruptionBudgets(namespace).Patch(
+		ctx, pdbName, types.MergePatchType, patchBytes, metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to patch PDB %s/%s: %w", namespace, pdbName, err)
+	}
+
+	log.Printf("Successfully updated PDB %s/%s", namespace, pdbName)
 	return nil
 }

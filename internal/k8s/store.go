@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	v1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 )
 
 type PodInfo struct {
@@ -24,10 +26,34 @@ type PodInfo struct {
 	LastRestart  time.Time
 }
 
+type HPAInfo struct {
+	Name               string
+	Namespace          string
+	TargetRef          string
+	MinReplicas        int32
+	MaxReplicas        int32
+	CurrentReplicas    int32
+	DesiredReplicas    int32
+	TargetCPUUtilization int32
+	CurrentCPUUtilization int32
+}
+
+type PDBInfo struct {
+	Name               string
+	Namespace          string
+	MinAvailable       int32
+	MaxUnavailable     int32
+	CurrentHealthy     int32
+	DesiredHealthy     int32
+	DisruptionsAllowed int32
+}
+
 type Store struct {
 	mu        sync.RWMutex
 	pods      map[string]*PodInfo
 	nodeZones map[string]string
+	hpas      map[string]*HPAInfo
+	pdbs      map[string]*PDBInfo
 	onChange  func()
 }
 
@@ -35,6 +61,8 @@ func NewStore(onChange func()) *Store {
 	return &Store{
 		pods:      make(map[string]*PodInfo),
 		nodeZones: make(map[string]string),
+		hpas:      make(map[string]*HPAInfo),
+		pdbs:      make(map[string]*PDBInfo),
 		onChange:  onChange,
 	}
 }
@@ -45,6 +73,44 @@ func (s *Store) Snapshot() []PodInfo {
 
 	result := make([]PodInfo, 0, len(s.pods))
 	for _, p := range s.pods {
+		result = append(result, *p)
+	}
+	return result
+}
+
+func (s *Store) UserPodsSnapshot() []PodInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]PodInfo, 0)
+	for _, p := range s.pods {
+		// Filter out system namespaces
+		if p.Namespace == "kube-system" || p.Namespace == "kube-public" || 
+		   p.Namespace == "kube-node-lease" || p.Namespace == "local-path-storage" {
+			continue
+		}
+		result = append(result, *p)
+	}
+	return result
+}
+
+func (s *Store) HPASnapshot() []HPAInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]HPAInfo, 0, len(s.hpas))
+	for _, h := range s.hpas {
+		result = append(result, *h)
+	}
+	return result
+}
+
+func (s *Store) PDBSnapshot() []PDBInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make([]PDBInfo, 0, len(s.pdbs))
+	for _, p := range s.pdbs {
 		result = append(result, *p)
 	}
 	return result
@@ -213,4 +279,142 @@ func extractContainerInfo(pod *v1.Pod) (ready bool, restartCount int32) {
 		ready = allReady
 	}
 	return
+}
+
+func (s *Store) OnHPAAdd(obj interface{}) {
+	hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
+		log.Printf("OnHPAAdd: unexpected type %T", obj)
+		return
+	}
+	s.updateHPA(hpa)
+}
+
+func (s *Store) OnHPAUpdate(oldObj, newObj interface{}) {
+	hpa, ok := newObj.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
+		log.Printf("OnHPAUpdate: unexpected type %T", newObj)
+		return
+	}
+	s.updateHPA(hpa)
+}
+
+func (s *Store) OnHPADelete(obj interface{}) {
+	hpa, ok := obj.(*autoscalingv2.HorizontalPodAutoscaler)
+	if !ok {
+		log.Printf("OnHPADelete: unexpected type %T", obj)
+		return
+	}
+
+	key := hpa.Namespace + "/" + hpa.Name
+	s.mu.Lock()
+	delete(s.hpas, key)
+	s.mu.Unlock()
+
+	if s.onChange != nil {
+		s.onChange()
+	}
+}
+
+func (s *Store) updateHPA(hpa *autoscalingv2.HorizontalPodAutoscaler) {
+	s.mu.Lock()
+	key := hpa.Namespace + "/" + hpa.Name
+
+	info := &HPAInfo{
+		Name:            hpa.Name,
+		Namespace:       hpa.Namespace,
+		TargetRef:       hpa.Spec.ScaleTargetRef.Name,
+		MinReplicas:     *hpa.Spec.MinReplicas,
+		MaxReplicas:     hpa.Spec.MaxReplicas,
+		CurrentReplicas: hpa.Status.CurrentReplicas,
+		DesiredReplicas: hpa.Status.DesiredReplicas,
+	}
+
+	// Extract target CPU utilization from metrics
+	for _, metric := range hpa.Spec.Metrics {
+		if metric.Type == autoscalingv2.ResourceMetricSourceType && metric.Resource != nil {
+			if metric.Resource.Name == "cpu" && metric.Resource.Target.AverageUtilization != nil {
+				info.TargetCPUUtilization = *metric.Resource.Target.AverageUtilization
+			}
+		}
+	}
+
+	// Extract current CPU utilization from status
+	for _, metric := range hpa.Status.CurrentMetrics {
+		if metric.Type == autoscalingv2.ResourceMetricSourceType && metric.Resource != nil {
+			if metric.Resource.Name == "cpu" && metric.Resource.Current.AverageUtilization != nil {
+				info.CurrentCPUUtilization = *metric.Resource.Current.AverageUtilization
+			}
+		}
+	}
+
+	s.hpas[key] = info
+	s.mu.Unlock()
+
+	if s.onChange != nil {
+		s.onChange()
+	}
+}
+
+func (s *Store) OnPDBAdd(obj interface{}) {
+	pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+	if !ok {
+		log.Printf("OnPDBAdd: unexpected type %T", obj)
+		return
+	}
+	s.updatePDB(pdb)
+}
+
+func (s *Store) OnPDBUpdate(oldObj, newObj interface{}) {
+	pdb, ok := newObj.(*policyv1.PodDisruptionBudget)
+	if !ok {
+		log.Printf("OnPDBUpdate: unexpected type %T", newObj)
+		return
+	}
+	s.updatePDB(pdb)
+}
+
+func (s *Store) OnPDBDelete(obj interface{}) {
+	pdb, ok := obj.(*policyv1.PodDisruptionBudget)
+	if !ok {
+		log.Printf("OnPDBDelete: unexpected type %T", obj)
+		return
+	}
+
+	key := pdb.Namespace + "/" + pdb.Name
+	s.mu.Lock()
+	delete(s.pdbs, key)
+	s.mu.Unlock()
+
+	if s.onChange != nil {
+		s.onChange()
+	}
+}
+
+func (s *Store) updatePDB(pdb *policyv1.PodDisruptionBudget) {
+	s.mu.Lock()
+	key := pdb.Namespace + "/" + pdb.Name
+
+	info := &PDBInfo{
+		Name:               pdb.Name,
+		Namespace:          pdb.Namespace,
+		CurrentHealthy:     pdb.Status.CurrentHealthy,
+		DesiredHealthy:     pdb.Status.DesiredHealthy,
+		DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
+	}
+
+	// Extract minAvailable or maxUnavailable from spec
+	if pdb.Spec.MinAvailable != nil {
+		info.MinAvailable = pdb.Spec.MinAvailable.IntVal
+	}
+	if pdb.Spec.MaxUnavailable != nil {
+		info.MaxUnavailable = pdb.Spec.MaxUnavailable.IntVal
+	}
+
+	s.pdbs[key] = info
+	s.mu.Unlock()
+
+	if s.onChange != nil {
+		s.onChange()
+	}
 }

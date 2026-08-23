@@ -117,3 +117,120 @@ func formatAge(t time.Time) string {
 	}
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
+
+func RenderHPAPanel(hpas []k8s.HPAInfo) string {
+	var b strings.Builder
+	b.WriteString(`<div id="hpa-panel" class="policy-panel">`)
+	b.WriteString(`<h2>Horizontal Pod Autoscaler</h2>`)
+
+	if len(hpas) == 0 {
+		b.WriteString(`<p class="empty">No HPA found</p>`)
+	} else {
+		for _, h := range hpas {
+			b.WriteString(renderHPACard(h))
+		}
+	}
+
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func renderHPACard(h k8s.HPAInfo) string {
+	var b strings.Builder
+	name := html.EscapeString(h.Name)
+	target := html.EscapeString(h.TargetRef)
+	namespace := html.EscapeString(h.Namespace)
+
+	b.WriteString(`<div class="policy-card">`)
+	b.WriteString(`<div class="policy-header">`)
+	b.WriteString(fmt.Sprintf(`<h3>%s</h3>`, name))
+	b.WriteString(fmt.Sprintf(`<span class="badge status-running">Target: %s</span>`, target))
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="policy-stats">`)
+	b.WriteString(`<div class="stat">`)
+	b.WriteString(`<label>Replicas:</label>`)
+	b.WriteString(fmt.Sprintf(`<span>%d / %d (min/max: %d-%d)</span>`,
+		h.CurrentReplicas, h.DesiredReplicas, h.MinReplicas, h.MaxReplicas))
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="stat">`)
+	b.WriteString(`<label>CPU Target:</label>`)
+	b.WriteString(fmt.Sprintf(`<span>%d%% (current: %d%%)</span>`,
+		h.TargetCPUUtilization, h.CurrentCPUUtilization))
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="policy-controls">`)
+	b.WriteString(fmt.Sprintf(`<label>Min Replicas: <span id="hpa-%s-min-val">%d</span></label>`, name, h.MinReplicas))
+	b.WriteString(fmt.Sprintf(`<input type="range" id="hpa-%s-min" min="1" max="%d" value="%d" `,
+		name, h.MaxReplicas, h.MinReplicas))
+	b.WriteString(fmt.Sprintf(`oninput="document.getElementById('hpa-%s-min-val').textContent=this.value">`, name))
+
+	b.WriteString(fmt.Sprintf(`<label>Max Replicas: <span id="hpa-%s-max-val">%d</span></label>`, name, h.MaxReplicas))
+	b.WriteString(fmt.Sprintf(`<input type="range" id="hpa-%s-max" min="%d" max="20" value="%d" `,
+		name, h.MinReplicas, h.MaxReplicas))
+	b.WriteString(fmt.Sprintf(`oninput="document.getElementById('hpa-%s-max-val').textContent=this.value">`, name))
+
+	b.WriteString(fmt.Sprintf(`<label>Target CPU %%: <span id="hpa-%s-cpu-val">%d</span></label>`, name, h.TargetCPUUtilization))
+	b.WriteString(fmt.Sprintf(`<input type="range" id="hpa-%s-cpu" min="10" max="90" value="%d" `,
+		name, h.TargetCPUUtilization))
+	b.WriteString(fmt.Sprintf(`oninput="document.getElementById('hpa-%s-cpu-val').textContent=this.value">`, name))
+
+	b.WriteString(fmt.Sprintf(`<button class="btn-apply" data-on:click="@post('/api/chaos/set-hpa?hpaName=%s&namespace=%s&minReplicas=' + document.getElementById('hpa-%s-min').value + '&maxReplicas=' + document.getElementById('hpa-%s-max').value + '&targetCPU=' + document.getElementById('hpa-%s-cpu').value)">Apply</button>`,
+		name, namespace, name, name, name))
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	return b.String()
+}
+
+func RenderPDBPanel(pdbs []k8s.PDBInfo) string {
+	var b strings.Builder
+	b.WriteString(`<div id="pdb-panel" class="policy-panel">`)
+	b.WriteString(`<h2>Pod Disruption Budget</h2>`)
+
+	if len(pdbs) == 0 {
+		b.WriteString(`<p class="empty">No PDB found</p>`)
+	} else {
+		for _, p := range pdbs {
+			b.WriteString(renderPDBCard(p))
+		}
+	}
+
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func renderPDBCard(p k8s.PDBInfo) string {
+	var b strings.Builder
+	name := html.EscapeString(p.Name)
+	namespace := html.EscapeString(p.Namespace)
+
+	b.WriteString(`<div class="policy-card">`)
+	b.WriteString(`<div class="policy-header">`)
+	b.WriteString(fmt.Sprintf(`<h3>%s</h3>`, name))
+	b.WriteString(fmt.Sprintf(`<span class="badge status-running">Namespace: %s</span>`, namespace))
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="policy-stats">`)
+	b.WriteString(`<div class="stat">`)
+	b.WriteString(`<label>Healthy:</label>`)
+	b.WriteString(fmt.Sprintf(`<span>%d / %d (current/desired)</span>`, p.CurrentHealthy, p.DesiredHealthy))
+	b.WriteString(`</div>`)
+	b.WriteString(`<div class="stat">`)
+	b.WriteString(`<label>Disruptions Allowed:</label>`)
+	b.WriteString(fmt.Sprintf(`<span>%d</span>`, p.DisruptionsAllowed))
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	b.WriteString(`<div class="policy-controls">`)
+	b.WriteString(fmt.Sprintf(`<label>Min Available: <span id="pdb-%s-min-val">%d</span></label>`, name, p.MinAvailable))
+	b.WriteString(fmt.Sprintf(`<input type="range" id="pdb-%s-min" min="0" max="10" value="%d" `, name, p.MinAvailable))
+	b.WriteString(fmt.Sprintf(`oninput="document.getElementById('pdb-%s-min-val').textContent=this.value">`, name))
+	b.WriteString(fmt.Sprintf(`<button class="btn-apply" data-on:click="@post('/api/chaos/set-pdb?pdbName=%s&namespace=%s&minAvailable=' + document.getElementById('pdb-%s-min').value)">Apply</button>`,
+		name, namespace, name))
+	b.WriteString(`</div>`)
+	b.WriteString(`</div>`)
+
+	return b.String()
+}

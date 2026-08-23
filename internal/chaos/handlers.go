@@ -107,3 +107,99 @@ func (c *Controller) HandleMemorySpike(w http.ResponseWriter, r *http.Request) {
 	// SSE connection will receive updates from informers automatically
 	w.WriteHeader(http.StatusAccepted)
 }
+
+// HandleSetHPA handles HTTP requests to update HPA settings.
+func (c *Controller) HandleSetHPA(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	hpaName := r.URL.Query().Get("hpaName")
+	namespace := r.URL.Query().Get("namespace")
+	minReplicasStr := r.URL.Query().Get("minReplicas")
+	maxReplicasStr := r.URL.Query().Get("maxReplicas")
+	targetCPUStr := r.URL.Query().Get("targetCPU")
+
+	if hpaName == "" || namespace == "" {
+		http.Error(w, "hpaName and namespace are required", http.StatusBadRequest)
+		return
+	}
+
+	minReplicas := int32(1)
+	if minReplicasStr != "" {
+		if m, err := strconv.ParseInt(minReplicasStr, 10, 32); err == nil {
+			minReplicas = int32(m)
+		}
+	}
+
+	maxReplicas := int32(10)
+	if maxReplicasStr != "" {
+		if m, err := strconv.ParseInt(maxReplicasStr, 10, 32); err == nil {
+			maxReplicas = int32(m)
+		}
+	}
+
+	targetCPU := int32(50)
+	if targetCPUStr != "" {
+		if t, err := strconv.ParseInt(targetCPUStr, 10, 32); err == nil {
+			targetCPU = int32(t)
+		}
+	}
+
+	if minReplicas < 1 {
+		minReplicas = 1
+	}
+	if maxReplicas < minReplicas {
+		maxReplicas = minReplicas
+	}
+	if targetCPU < 1 || targetCPU > 100 {
+		targetCPU = 50
+	}
+
+	if err := c.SetHPA(r.Context(), hpaName, namespace, minReplicas, maxReplicas, targetCPU); err != nil {
+		log.Printf("Failed to update HPA: %v", err)
+		http.Error(w, "Failed to update HPA: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("HPA updated: %s/%s min=%d max=%d targetCPU=%d%%", namespace, hpaName, minReplicas, maxReplicas, targetCPU)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// HandleSetPDB handles HTTP requests to update PDB settings.
+func (c *Controller) HandleSetPDB(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	pdbName := r.URL.Query().Get("pdbName")
+	namespace := r.URL.Query().Get("namespace")
+	minAvailableStr := r.URL.Query().Get("minAvailable")
+
+	if pdbName == "" || namespace == "" {
+		http.Error(w, "pdbName and namespace are required", http.StatusBadRequest)
+		return
+	}
+
+	minAvailable := int32(1)
+	if minAvailableStr != "" {
+		if m, err := strconv.ParseInt(minAvailableStr, 10, 32); err == nil {
+			minAvailable = int32(m)
+		}
+	}
+
+	if minAvailable < 0 {
+		minAvailable = 0
+	}
+
+	if err := c.SetPDB(r.Context(), pdbName, namespace, minAvailable); err != nil {
+		log.Printf("Failed to update PDB: %v", err)
+		http.Error(w, "Failed to update PDB: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("PDB updated: %s/%s minAvailable=%d", namespace, pdbName, minAvailable)
+	w.WriteHeader(http.StatusAccepted)
+}
