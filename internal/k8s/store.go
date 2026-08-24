@@ -24,6 +24,7 @@ type PodInfo struct {
 	Age          time.Time
 	Deleting     bool
 	LastRestart  time.Time
+	CPUUsage     string
 }
 
 type HPAInfo struct {
@@ -416,5 +417,16 @@ func (s *Store) updatePDB(pdb *policyv1.PodDisruptionBudget) {
 
 	if s.onChange != nil {
 		s.onChange()
+	}
+}
+
+// UpdatePodCPU updates CPU usage for a specific pod.
+func (s *Store) UpdatePodCPU(podName, namespace, cpuUsage string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	key := namespace + "/" + podName
+	if pod, exists := s.pods[key]; exists {
+		pod.CPUUsage = cpuUsage
 	}
 }

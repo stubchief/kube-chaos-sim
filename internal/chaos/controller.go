@@ -12,19 +12,22 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"kube-chaos-sim/internal/k8s"
+	"kube-chaos-sim/internal/metrics"
 )
 
 // Controller executes chaos actions against the Kubernetes cluster.
 type Controller struct {
-	clientset kubernetes.Interface
-	store     *k8s.Store
+	clientset  kubernetes.Interface
+	store      *k8s.Store
+	metricsGen *metrics.Generator
 }
 
 // NewController creates a new Chaos Controller.
-func NewController(clientset kubernetes.Interface, store *k8s.Store) *Controller {
+func NewController(clientset kubernetes.Interface, store *k8s.Store, metricsGen *metrics.Generator) *Controller {
 	return &Controller{
-		clientset: clientset,
-		store:     store,
+		clientset:  clientset,
+		store:      store,
+		metricsGen: metricsGen,
 	}
 }
 
@@ -140,5 +143,49 @@ func (c *Controller) SetPDB(ctx context.Context, pdbName, namespace string, minA
 	}
 
 	log.Printf("Successfully updated PDB %s/%s", namespace, pdbName)
+	return nil
+}
+
+// SetSLO updates the SLO target percentage in the metrics generator.
+func (c *Controller) SetSLO(slo float64) {
+	log.Printf("Updating SLO to %.1f%%", slo)
+	c.metricsGen.SetSLO(slo)
+}
+
+// RollingUpdate triggers a rolling update of the deployment.
+func (c *Controller) RollingUpdate(ctx context.Context, deploymentName, namespace string) error {
+	log.Printf("Triggering rolling update for deployment %s/%s", namespace, deploymentName)
+
+	// Use kubectl rollout restart
+	cmd := exec.CommandContext(ctx, "kubectl", "rollout", "restart", "deployment/"+deploymentName, "-n", namespace)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("kubectl rollout restart failed: %w, output: %s", err, string(output))
+	}
+
+	log.Printf("Rolling update triggered for %s/%s: %s", namespace, deploymentName, string(output))
+	return nil
+}
+
+// CPUStress triggers CPU stress on a pod via shell command.
+func (c *Controller) CPUStress(ctx context.Context, podName, namespace string, cpuCores int, durationSec int) error {
+	log.Printf("Triggering CPU stress on pod %s/%s: %d cores for %d seconds", namespace, podName, cpuCores, durationSec)
+
+	// podinfo doesn't have a /stress endpoint, so we use shell commands inside the pod.
+	// Spawn N busy loops in background, sleep for duration, then kill them.
+	// Works with any container that has sh (podinfo uses alpine-based image).
+	script := fmt.Sprintf(
+		"for i in $(seq 1 %d); do yes > /dev/null & done; PIDS=$!; sleep %d; kill $PIDS 2>/dev/null || true",
+		cpuCores, durationSec,
+	)
+
+	cmd := exec.CommandContext(ctx, "kubectl", "exec", "-n", namespace, podName, "--",
+		"sh", "-c", script)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("kubectl exec failed: %w, output: %s", err, string(output))
+	}
+
+	log.Printf("CPU stress triggered on %s/%s: %s", namespace, podName, string(output))
 	return nil
 }

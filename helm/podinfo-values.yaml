@@ -1,0 +1,10 @@
+# Podinfo Helm values for kube-chaos-sim
+# Proper resource requests to avoid HPA showing absurd CPU percentages
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi

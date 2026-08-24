@@ -13,15 +13,17 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsv "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 type Client struct {
-	clientset    kubernetes.Interface
-	factory      informers.SharedInformerFactory
-	podInformer  coreinformers.PodInformer
-	nodeInformer coreinformers.NodeInformer
-	hpaInformer  autoscalinginformers.HorizontalPodAutoscalerInformer
-	pdbInformer  policyinformers.PodDisruptionBudgetInformer
+	clientset     kubernetes.Interface
+	metricsClient metricsv.Interface
+	factory       informers.SharedInformerFactory
+	podInformer   coreinformers.PodInformer
+	nodeInformer  coreinformers.NodeInformer
+	hpaInformer   autoscalinginformers.HorizontalPodAutoscalerInformer
+	pdbInformer   policyinformers.PodDisruptionBudgetInformer
 }
 
 func NewClient(kubeconfig string) (*Client, error) {
@@ -48,15 +50,21 @@ func NewClient(kubeconfig string) (*Client, error) {
 		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
+	metricsClient, err := metricsv.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create metrics client: %w", err)
+	}
+
 	factory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
 
 	return &Client{
-		clientset:    clientset,
-		factory:      factory,
-		podInformer:  factory.Core().V1().Pods(),
-		nodeInformer: factory.Core().V1().Nodes(),
-		hpaInformer:  factory.Autoscaling().V2().HorizontalPodAutoscalers(),
-		pdbInformer:  factory.Policy().V1().PodDisruptionBudgets(),
+		clientset:     clientset,
+		metricsClient: metricsClient,
+		factory:       factory,
+		podInformer:   factory.Core().V1().Pods(),
+		nodeInformer:  factory.Core().V1().Nodes(),
+		hpaInformer:   factory.Autoscaling().V2().HorizontalPodAutoscalers(),
+		pdbInformer:   factory.Policy().V1().PodDisruptionBudgets(),
 	}, nil
 }
 
@@ -78,6 +86,10 @@ func (c *Client) PDBInformer() policyinformers.PodDisruptionBudgetInformer {
 
 func (c *Client) Clientset() kubernetes.Interface {
 	return c.clientset
+}
+
+func (c *Client) MetricsClient() metricsv.Interface {
+	return c.metricsClient
 }
 
 func (c *Client) Run(ctx context.Context) {

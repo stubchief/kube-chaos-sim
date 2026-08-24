@@ -214,6 +214,8 @@ tr.status-unknown {
     cursor: pointer;
     transition: background 0.2s;
     margin-left: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .btn-latency:hover {
@@ -231,6 +233,8 @@ tr.status-unknown {
     cursor: pointer;
     transition: background 0.2s;
     margin-left: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }
 
 .btn-spike:hover {
@@ -337,4 +341,166 @@ td.actions {
 
 .btn-apply:active {
     background: #004085;
+}
+
+/* Metrics Panel */
+#metrics-panel {
+    margin: 2rem 0;
+    background: white;
+    padding: 1.5rem;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#metrics-panel h2 {
+    margin-bottom: 1rem;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 2rem;
+}
+
+.metric-chart {
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 1rem;
+}
+
+.metric-chart h3 {
+    font-size: 1rem;
+    color: #34495e;
+    margin-bottom: 0.5rem;
+}
+
+.chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.metrics-info {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.metrics-badge {
+    background: #e9ecef;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: #495057;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-apply-small {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 0.3rem 0.6rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-apply-small:hover {
+    background: #0056b3;
+}
+
+.btn-apply-small:active {
+    background: #004085;
+}
+
+.btn-rolling-update {
+    background: #fd7e14;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-left: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-rolling-update:hover {
+    background: #e8590c;
+}
+
+.btn-rolling-update:active {
+    background: #d9480f;
+}
+
+.btn-cpu {
+    background: #7950f8;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-left: 0.3rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-cpu:hover {
+    background: #6741d9;
+}
+
+.btn-cpu:active {
+    background: #5f3dc4;
+}
+
+.btn-cpu-stress {
+    background: #7950f8;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.btn-cpu-stress:hover {
+    background: #6741d9;
+}
+
+.btn-cpu-stress:active {
+    background: #5f3dc4;
+}
+
+.stress-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+}
+
+.stress-controls label {
+    font-size: 0.9rem;
+    color: #555;
+    font-weight: 600;
 }

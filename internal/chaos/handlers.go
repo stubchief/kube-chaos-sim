@@ -203,3 +203,100 @@ func (c *Controller) HandleSetPDB(w http.ResponseWriter, r *http.Request) {
 	log.Printf("PDB updated: %s/%s minAvailable=%d", namespace, pdbName, minAvailable)
 	w.WriteHeader(http.StatusAccepted)
 }
+
+// HandleSetSLO handles HTTP requests to update the SLO target.
+func (c *Controller) HandleSetSLO(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sloStr := r.URL.Query().Get("slo")
+	if sloStr == "" {
+		http.Error(w, "slo is required", http.StatusBadRequest)
+		return
+	}
+
+	slo, err := strconv.ParseFloat(sloStr, 64)
+	if err != nil {
+		http.Error(w, "Invalid SLO value", http.StatusBadRequest)
+		return
+	}
+
+	if slo < 0 || slo > 100 {
+		http.Error(w, "SLO must be between 0 and 100", http.StatusBadRequest)
+		return
+	}
+
+	c.SetSLO(slo)
+	log.Printf("SLO updated to %.1f%%", slo)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// HandleRollingUpdate handles HTTP requests to trigger a rolling update.
+func (c *Controller) HandleRollingUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	deploymentName := r.URL.Query().Get("deployment")
+	namespace := r.URL.Query().Get("namespace")
+
+	if deploymentName == "" {
+		deploymentName = "podinfo"
+	}
+	if namespace == "" {
+		namespace = "default"
+	}
+
+	if err := c.RollingUpdate(r.Context(), deploymentName, namespace); err != nil {
+		log.Printf("Rolling update failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Rolling update triggered for %s/%s", namespace, deploymentName)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// HandleCPUStress handles HTTP requests to trigger CPU stress on a pod.
+func (c *Controller) HandleCPUStress(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	podName := r.URL.Query().Get("podName")
+	namespace := r.URL.Query().Get("namespace")
+	cpuCoresStr := r.URL.Query().Get("cpuCores")
+	durationStr := r.URL.Query().Get("duration")
+
+	if podName == "" || namespace == "" {
+		http.Error(w, "podName and namespace are required", http.StatusBadRequest)
+		return
+	}
+
+	cpuCores := 1
+	if cpuCoresStr != "" {
+		if val, err := strconv.Atoi(cpuCoresStr); err == nil && val > 0 {
+			cpuCores = val
+		}
+	}
+
+	duration := 30
+	if durationStr != "" {
+		if val, err := strconv.Atoi(durationStr); err == nil && val > 0 {
+			duration = val
+		}
+	}
+
+	if err := c.CPUStress(r.Context(), podName, namespace, cpuCores, duration); err != nil {
+		log.Printf("CPU stress failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("CPU stress triggered on %s/%s: %d cores for %d seconds", namespace, podName, cpuCores, duration)
+	w.WriteHeader(http.StatusAccepted)
+}

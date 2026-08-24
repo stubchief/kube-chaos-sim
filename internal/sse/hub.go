@@ -8,6 +8,7 @@ import (
 
 	"github.com/starfederation/datastar-go/datastar"
 	"kube-chaos-sim/internal/k8s"
+	"kube-chaos-sim/internal/metrics"
 )
 
 type Hub struct {
@@ -16,17 +17,20 @@ type Hub struct {
 	snapshot func() []k8s.PodInfo
 	hpaSnapshot func() []k8s.HPAInfo
 	pdbSnapshot func() []k8s.PDBInfo
+	metricsGen *metrics.Generator
 
 	debounceMu    sync.Mutex
 	debounceTimer *time.Timer
 }
 
-func NewHub(snapshot func() []k8s.PodInfo, hpaSnapshot func() []k8s.HPAInfo, pdbSnapshot func() []k8s.PDBInfo) *Hub {
+func NewHub(snapshot func() []k8s.PodInfo, hpaSnapshot func() []k8s.HPAInfo, 
+	pdbSnapshot func() []k8s.PDBInfo, metricsGen *metrics.Generator) *Hub {
 	return &Hub{
 		clients:  make(map[chan string]struct{}),
 		snapshot: snapshot,
 		hpaSnapshot: hpaSnapshot,
 		pdbSnapshot: pdbSnapshot,
+		metricsGen: metricsGen,
 	}
 }
 
@@ -79,7 +83,8 @@ func (h *Hub) Handler() http.HandlerFunc {
 		hpas := h.hpaSnapshot()
 		pdbs := h.pdbSnapshot()
 		log.Printf("Snapshot: %d pods, %d HPAs, %d PDBs", len(pods), len(hpas), len(pdbs))
-		initialHTML := RenderPodGrid(pods) + RenderHPAPanel(hpas) + RenderPDBPanel(pdbs)
+		initialHTML := RenderPodGrid(pods) + RenderHPAPanel(hpas) + RenderPDBPanel(pdbs) +
+			RenderMetricsPanel(h.metricsGen.Snapshot(), h.metricsGen)
 		
 		if err := sse.PatchElements(initialHTML); err != nil {
 			log.Printf("Failed to send initial snapshot: %v", err)
