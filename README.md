@@ -21,19 +21,18 @@ Install tools:
 - [helm](https://helm.sh/docs/intro/install/)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 
-### Create cluster and deploy target microservice
+### Create cluster and deploy everything
 
 ```bash
-# Create kind cluster with 3 emulated zones (ru-central1-a/b/d)
-kind create cluster --name chaos-sim --config kind-config.yaml
-
-# Deploy podinfo as target microservice
-helm repo add podinfo https://stefanprodan.github.io/podinfo
-helm upgrade --install podinfo podinfo/podinfo
-
-# Verify pods are running
-kubectl get pods
+# Create kind cluster, install metrics-server, deploy podinfo
+./scripts/setup-cluster.sh
 ```
+
+This script:
+- Creates kind cluster with 3 emulated zones (ru-central1-a/b/d)
+- Installs metrics-server with 5s resolution (default 15-30s)
+- Deploys podinfo as target microservice
+- Applies accelerated HPA settings (sync-period=5s, downscale-stabilization=20s)
 
 ### Run the backend
 

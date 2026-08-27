@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"kube-chaos-sim/internal/config"
 	"kube-chaos-sim/internal/k8s"
 	"kube-chaos-sim/internal/metrics"
 )
@@ -67,9 +68,9 @@ func renderPodRow(p k8s.PodInfo) string {
 			`<td>%s</td>`+
 			`<td class="actions">`+
 				`<button class="btn-kill" data-on:click="@post('/api/chaos/kill-pod?podName=%s&namespace=%s')">Kill</button>`+
-				`<button class="btn-latency" data-on:click="@post('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=5')">+5s</button>`+
-				`<button class="btn-spike" data-on:click="@post('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=100')">Spike</button>`+
-				`<button class="btn-cpu" data-on:click="@post('/api/chaos/cpu-stress?podName=%s&namespace=%s&cpuCores=1&duration=30')">CPU</button>`+
+				`<button class="btn-latency" data-on:click="@post('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=%d')">+%ds</button>`+
+				`<button class="btn-spike" data-on:click="@post('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=%d')">Spike</button>`+
+				`<button class="btn-cpu" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress?podName=%s&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU</button>`+
 			`</td>`+
 			`</tr>`,
 		cssClass,
@@ -87,10 +88,15 @@ func renderPodRow(p k8s.PodInfo) string {
 		html.EscapeString(p.Namespace),
 		html.EscapeString(p.Name),
 		html.EscapeString(p.Namespace),
+		config.DefaultLatencySeconds,
+		config.DefaultLatencySeconds,
 		html.EscapeString(p.Name),
 		html.EscapeString(p.Namespace),
+		config.DefaultMemoryMB,
 		html.EscapeString(p.Name),
 		html.EscapeString(p.Namespace),
+		config.DefaultCPUDuration,
+		config.DefaultCPUDuration,
 	)
 }
 
@@ -189,11 +195,8 @@ func renderHPACard(h k8s.HPAInfo) string {
 		name, namespace, name, name, name))
 	
 	b.WriteString(`<div class="stress-controls">`)
-	b.WriteString(fmt.Sprintf(`<label>CPU Stress (cores): <span id="hpa-%s-stress-val">1</span></label>`, name))
-	b.WriteString(fmt.Sprintf(`<input type="range" id="hpa-%s-stress" min="1" max="4" value="1" `, name))
-	b.WriteString(fmt.Sprintf(`oninput="document.getElementById('hpa-%s-stress-val').textContent=this.value">`, name))
-	b.WriteString(fmt.Sprintf(`<button class="btn-cpu-stress" data-on:click="@post('/api/chaos/cpu-stress?podName=podinfo&namespace=%s&cpuCores=' + document.getElementById('hpa-%s-stress').value + '&duration=30')">CPU Stress (all pods)</button>`,
-		namespace, name))
+	b.WriteString(fmt.Sprintf(`<button class="btn-cpu-stress" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress-all?deployment=podinfo&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU Stress (all pods)</button>`,
+		namespace, config.DefaultCPUDuration, config.DefaultCPUDuration))
 	b.WriteString(`</div>`)
 	
 	b.WriteString(`</div>`)

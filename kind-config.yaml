@@ -2,6 +2,13 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    controllerManager:
+      extraArgs:
+        horizontal-pod-autoscaler-sync-period: "5s"
+        horizontal-pod-autoscaler-downscale-stabilization: "20s"
 - role: worker
   labels:
     topology.kubernetes.io/zone: ru-central1-a

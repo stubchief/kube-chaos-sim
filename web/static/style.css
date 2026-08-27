@@ -504,3 +504,15 @@ td.actions {
     color: #555;
     font-weight: 600;
 }
+
+/* Disabled button state */
+button:disabled {
+    background: #adb5bd !important;
+    color: #6c757d !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
+}
+
+button:disabled:hover {
+    background: #adb5bd !important;
+}

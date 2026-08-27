@@ -167,16 +167,27 @@ func (c *Controller) RollingUpdate(ctx context.Context, deploymentName, namespac
 	return nil
 }
 
+// CPUStressAsync triggers CPU stress on a pod asynchronously (doesn't block).
+func (c *Controller) CPUStressAsync(podName, namespace string, durationSec int) {
+	go func() {
+		// Use background context since we don't want to cancel when HTTP request ends
+		ctx := context.Background()
+		if err := c.CPUStress(ctx, podName, namespace, durationSec); err != nil {
+			log.Printf("CPU stress failed for %s/%s: %v", namespace, podName, err)
+		}
+	}()
+}
+
 // CPUStress triggers CPU stress on a pod via shell command.
-func (c *Controller) CPUStress(ctx context.Context, podName, namespace string, cpuCores int, durationSec int) error {
-	log.Printf("Triggering CPU stress on pod %s/%s: %d cores for %d seconds", namespace, podName, cpuCores, durationSec)
+func (c *Controller) CPUStress(ctx context.Context, podName, namespace string, durationSec int) error {
+	log.Printf("Triggering CPU stress on pod %s/%s for %d seconds", namespace, podName, durationSec)
 
 	// podinfo doesn't have a /stress endpoint, so we use shell commands inside the pod.
-	// Spawn N busy loops in background, sleep for duration, then kill them.
+	// Spawn busy loops in background, sleep for duration, then kill all of them.
 	// Works with any container that has sh (podinfo uses alpine-based image).
 	script := fmt.Sprintf(
-		"for i in $(seq 1 %d); do yes > /dev/null & done; PIDS=$!; sleep %d; kill $PIDS 2>/dev/null || true",
-		cpuCores, durationSec,
+		"for i in $(seq 1 4); do yes > /dev/null & done; sleep %d; pkill -P $$ yes || true",
+		durationSec,
 	)
 
 	cmd := exec.CommandContext(ctx, "kubectl", "exec", "-n", namespace, podName, "--",
@@ -187,5 +198,44 @@ func (c *Controller) CPUStress(ctx context.Context, podName, namespace string, c
 	}
 
 	log.Printf("CPU stress triggered on %s/%s: %s", namespace, podName, string(output))
+	return nil
+}
+
+// CPUStressAllAsync triggers CPU stress on all pods of a deployment asynchronously.
+func (c *Controller) CPUStressAllAsync(deploymentName, namespace string, durationSec int) {
+	go func() {
+		ctx := context.Background()
+		if err := c.CPUStressAll(ctx, deploymentName, namespace, durationSec); err != nil {
+			log.Printf("CPU stress all failed for %s/%s: %v", namespace, deploymentName, err)
+		}
+	}()
+}
+
+// CPUStressAll triggers CPU stress on all Running pods of a deployment.
+func (c *Controller) CPUStressAll(ctx context.Context, deploymentName, namespace string, durationSec int) error {
+	log.Printf("Triggering CPU stress on all pods of %s/%s for %d seconds", namespace, deploymentName, durationSec)
+
+	// Get all pods from the store
+	pods := c.store.UserPodsSnapshot()
+
+	// Filter pods by namespace and status
+	var targetPods []k8s.PodInfo
+	for _, pod := range pods {
+		if pod.Namespace == namespace && pod.Status == "Running" {
+			targetPods = append(targetPods, pod)
+		}
+	}
+
+	if len(targetPods) == 0 {
+		return fmt.Errorf("no Running pods found for deployment %s in namespace %s", deploymentName, namespace)
+	}
+
+	log.Printf("Found %d Running pods for CPU stress", len(targetPods))
+
+	// Trigger CPU stress on each pod
+	for _, pod := range targetPods {
+		c.CPUStressAsync(pod.Name, pod.Namespace, durationSec)
+	}
+
 	return nil
 }

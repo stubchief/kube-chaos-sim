@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+
+	"kube-chaos-sim/internal/config"
 )
 // HandleKillPod handles HTTP requests to kill a pod.
 func (c *Controller) HandleKillPod(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +49,7 @@ func (c *Controller) HandleInjectLatency(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	seconds := 5 // default
+	seconds := config.DefaultLatencySeconds // default
 	if secondsStr != "" {
 		if s, err := strconv.Atoi(secondsStr); err == nil {
 			seconds = s
@@ -86,7 +88,7 @@ func (c *Controller) HandleMemorySpike(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	megabytes := 100 // default
+	megabytes := config.DefaultMemoryMB // default
 	if megabytesStr != "" {
 		if m, err := strconv.Atoi(megabytesStr); err == nil {
 			megabytes = m
@@ -94,7 +96,7 @@ func (c *Controller) HandleMemorySpike(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if megabytes <= 0 {
-		megabytes = 100
+		megabytes = config.DefaultMemoryMB
 	}
 
 	if err := c.MemorySpike(r.Context(), podName, namespace, megabytes); err != nil {
@@ -183,7 +185,7 @@ func (c *Controller) HandleSetPDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	minAvailable := int32(1)
+	minAvailable := int32(config.DefaultPDBMinAvailable)
 	if minAvailableStr != "" {
 		if m, err := strconv.ParseInt(minAvailableStr, 10, 32); err == nil {
 			minAvailable = int32(m)
@@ -269,7 +271,6 @@ func (c *Controller) HandleCPUStress(w http.ResponseWriter, r *http.Request) {
 
 	podName := r.URL.Query().Get("podName")
 	namespace := r.URL.Query().Get("namespace")
-	cpuCoresStr := r.URL.Query().Get("cpuCores")
 	durationStr := r.URL.Query().Get("duration")
 
 	if podName == "" || namespace == "" {
@@ -277,26 +278,45 @@ func (c *Controller) HandleCPUStress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cpuCores := 1
-	if cpuCoresStr != "" {
-		if val, err := strconv.Atoi(cpuCoresStr); err == nil && val > 0 {
-			cpuCores = val
-		}
-	}
-
-	duration := 30
+	duration := config.DefaultCPUDuration
 	if durationStr != "" {
 		if val, err := strconv.Atoi(durationStr); err == nil && val > 0 {
 			duration = val
 		}
 	}
 
-	if err := c.CPUStress(r.Context(), podName, namespace, cpuCores, duration); err != nil {
-		log.Printf("CPU stress failed: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// Trigger CPU stress asynchronously (doesn't block UI)
+	c.CPUStressAsync(podName, namespace, duration)
+
+	log.Printf("CPU stress initiated on %s/%s for %d seconds", namespace, podName, duration)
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (c *Controller) HandleCPUStressAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	log.Printf("CPU stress triggered on %s/%s: %d cores for %d seconds", namespace, podName, cpuCores, duration)
+	deployment := r.URL.Query().Get("deployment")
+	namespace := r.URL.Query().Get("namespace")
+	durationStr := r.URL.Query().Get("duration")
+
+	if deployment == "" || namespace == "" {
+		http.Error(w, "deployment and namespace are required", http.StatusBadRequest)
+		return
+	}
+
+	duration := config.DefaultCPUDuration
+	if durationStr != "" {
+		if val, err := strconv.Atoi(durationStr); err == nil && val > 0 {
+			duration = val
+		}
+	}
+
+	// Trigger CPU stress on all pods asynchronously (doesn't block UI)
+	c.CPUStressAllAsync(deployment, namespace, duration)
+
+	log.Printf("CPU stress initiated on all pods of %s/%s for %d seconds", namespace, deployment, duration)
 	w.WriteHeader(http.StatusAccepted)
 }

@@ -140,7 +140,17 @@ func (g *Generator) Compute(pods []k8s.PodInfo) Metrics {
 
 	var notReadyCount, restartingCount, crashLoopCount int
 	for _, p := range pods {
-		if !p.Ready && p.Status != "Terminating" && p.Status != "Succeeded" {
+		// Skip pods in normal lifecycle states (scaling, rolling update)
+		if p.Status == "Terminating" || p.Status == "Succeeded" ||
+			p.Status == "Pending" || p.Status == "ContainerCreating" {
+			continue
+		}
+		// Skip new pods that haven't passed readiness probe yet (Running + !Ready + no restarts).
+		// These are normal during scaling/rolling update — not real failures.
+		if !p.Ready && p.Status == "Running" && p.RestartCount == 0 {
+			continue
+		}
+		if !p.Ready {
 			notReadyCount++
 		}
 		if p.Status == "Restarting" {

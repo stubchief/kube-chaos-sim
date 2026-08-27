@@ -1,4 +1,5 @@
 .clinerules/
 server
 chaos-server
+mainserver.log
 main
