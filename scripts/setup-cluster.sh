@@ -1,6 +1,6 @@
 #!/bin/bash
 # Complete cluster setup: create kind cluster + install metrics-server + deploy podinfo
-# Run this once to prepare the environment
+# Run this once to prepare the environment, then run build-image.sh to deploy the backend
 
 set -e
 
@@ -21,7 +21,7 @@ echo "=== Patching metrics-server for kind compatibility ==="
 # Also speed up resolution to 15s (must be > kubelet-request-timeout which is 10s)
 kubectl patch deployment metrics-server -n kube-system --type='json' -p='[
   {"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"},
-  {"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--metric-resolution=5s"}
+  {"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--metric-resolution=15s"}
 ]'
 
 echo ""
@@ -58,6 +58,5 @@ echo "Expected HPA reaction times:"
 echo "  - Upscaling: 5-10 seconds"
 echo "  - Downscaling: 20-30 seconds"
 echo ""
-echo "Next step:"
-echo "  Run backend: go run ./cmd/server"
-echo "  Open http://localhost:8080"
+echo "Next step: build and deploy the backend"
+echo "  ./scripts/build-image.sh"

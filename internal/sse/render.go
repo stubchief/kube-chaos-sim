@@ -68,8 +68,8 @@ func renderPodRow(p k8s.PodInfo) string {
 			`<td>%s</td>`+
 			`<td class="actions">`+
 				`<button class="btn-kill" data-on:click="@post('/api/chaos/kill-pod?podName=%s&namespace=%s')">Kill</button>`+
-				`<button class="btn-latency" data-on:click="@post('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=%d')">+%ds</button>`+
-				`<button class="btn-spike" data-on:click="@post('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=%d')">Spike</button>`+
+				`<button class="btn-latency" onclick="this.disabled=true; fetch('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 5000)">+%ds</button>`+
+				`<button class="btn-spike" onclick="this.disabled=true; fetch('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 10000)">Spike</button>`+
 				`<button class="btn-cpu" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress?podName=%s&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU</button>`+
 			`</td>`+
 			`</tr>`,

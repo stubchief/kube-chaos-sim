@@ -37,6 +37,10 @@ type Generator struct {
 	tickRate time.Duration
 	slo      float64 // SLO percentage (e.g., 80 means 80% availability target)
 
+	// Active latency injection (from chaos actions)
+	injectedLatency      float64   // ms to add while injection is active
+	injectedLatencyUntil time.Time // when the injection expires
+
 	// Thresholds for each metric
 	latencyThresholds     []Threshold
 	errorRateThresholds   []Threshold
@@ -132,6 +136,15 @@ func (g *Generator) SLO() float64 {
 	return g.slo
 }
 
+// InjectLatency registers a latency injection that will be reflected in metrics.
+// The injection lasts for the specified duration and adds the given ms to latency.
+func (g *Generator) InjectLatency(ms float64, duration time.Duration) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.injectedLatency = ms
+	g.injectedLatencyUntil = time.Now().Add(duration)
+}
+
 // Compute calculates metrics based on current pod state.
 func (g *Generator) Compute(pods []k8s.PodInfo) Metrics {
 	if len(pods) == 0 {
@@ -167,6 +180,14 @@ func (g *Generator) Compute(pods []k8s.PodInfo) Metrics {
 		float64(notReadyCount)*100 +
 		float64(restartingCount)*200 +
 		float64(crashLoopCount)*500
+
+	// Add injected latency from chaos actions (if still active)
+	// Divide by pod count to get average latency across all pods
+	g.mu.RLock()
+	if time.Now().Before(g.injectedLatencyUntil) {
+		latency += g.injectedLatency / float64(len(pods))
+	}
+	g.mu.RUnlock()
 
 	// Error Rate: 0% when healthy, increases with unhealthy pods
 	errorRate := float64(notReadyCount)*10 + float64(crashLoopCount)*25

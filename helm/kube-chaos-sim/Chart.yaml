@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kube-chaos-sim
+description: Kubernetes Chaos Engineering Dashboard backend
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,6 +89,10 @@ func (s *Store) UserPodsSnapshot() []PodInfo {
 		// Filter out system namespaces
 		if p.Namespace == "kube-system" || p.Namespace == "kube-public" || 
 		   p.Namespace == "kube-node-lease" || p.Namespace == "local-path-storage" {
+			continue
+		}
+		// Filter out backend pods (kube-chaos-sim itself)
+		if strings.HasPrefix(p.Name, "kube-chaos-sim-") {
 			continue
 		}
 		result = append(result, *p)

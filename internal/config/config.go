@@ -14,7 +14,7 @@ const (
 	CPUMetricsInterval      = 1 * time.Second // was 5s - more responsive UI
 	MetricsTickInterval     = 1 * time.Second // was 2s - smoother charts
 	MetricsHistorySize      = 120             // 120 points × 1s = 2 minutes
-	MetricsServerResolution = 5               // seconds - minimum supported by metrics-server
+	MetricsServerResolution = 15              // seconds - minimum supported by metrics-server (must be > kubelet-request-timeout 10s)
 )
 
 // HPA defaults

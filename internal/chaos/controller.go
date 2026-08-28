@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -49,13 +50,17 @@ func (c *Controller) InjectLatency(ctx context.Context, podName, namespace strin
 	log.Printf("Injecting %ds latency to pod %s/%s", seconds, namespace, podName)
 	
 	// Use kubectl exec to call the delay endpoint from inside the cluster
+	// Use curl instead of wget (podinfo has curl, wget is BusyBox version with limited options)
 	cmd := exec.CommandContext(ctx, "kubectl", "exec", "-n", namespace, podName, "--",
-		"wget", "-qO-", fmt.Sprintf("--timeout=%d", seconds+5), fmt.Sprintf("http://localhost:9898/delay/%d", seconds))
+		"curl", "-s", "--max-time", fmt.Sprintf("%d", seconds+5), fmt.Sprintf("http://localhost:9898/delay/%d", seconds))
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to call podinfo delay endpoint via kubectl exec: %w, output: %s", err, string(output))
 	}
+	
+	// Register latency injection in metrics (duration = seconds, matching the button label)
+	c.metricsGen.InjectLatency(float64(seconds)*1000, time.Duration(seconds)*time.Second)
 	
 	log.Printf("Successfully injected %ds latency to pod %s/%s", seconds, namespace, podName)
 	return nil
@@ -67,8 +72,9 @@ func (c *Controller) MemorySpike(ctx context.Context, podName, namespace string,
 	log.Printf("Triggering memory spike in pod %s/%s (%dMB requested, using /panic)", namespace, podName, megabytes)
 	
 	// Use kubectl exec to call the panic endpoint from inside the cluster
+	// Use curl instead of wget (podinfo has curl, wget is BusyBox version with limited options)
 	cmd := exec.CommandContext(ctx, "kubectl", "exec", "-n", namespace, podName, "--",
-		"wget", "-qO-", "--timeout=5", "http://localhost:9898/panic")
+		"curl", "-s", "--max-time", "5", "http://localhost:9898/panic")
 	
 	output, err := cmd.CombinedOutput()
 	// /panic endpoint crashes the pod, so connection error or timeout is expected

@@ -1,0 +1,32 @@
+# Default values for kube-chaos-sim
+# This is a YAML-formatted file.
+
+# Backend server configuration
+replicaCount: 1
+
+image:
+  repository: kube-chaos-sim
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 8080
+  nodePort: 30080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# ServiceAccount for the backend pod
+serviceAccount:
+  create: true
+  name: kube-chaos-sim
+
+# RBAC: ClusterRole with permissions for client-go operations
+rbac:
+  create: true
