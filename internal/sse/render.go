@@ -67,10 +67,10 @@ func renderPodRow(p k8s.PodInfo) string {
 			`<td>%d</td>`+
 			`<td>%s</td>`+
 			`<td class="actions">`+
-				`<button class="btn-kill" data-on:click="@post('/api/chaos/kill-pod?podName=%s&namespace=%s')">Kill</button>`+
-				`<button class="btn-latency" onclick="this.disabled=true; fetch('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 5000)">+%ds</button>`+
-				`<button class="btn-spike" onclick="this.disabled=true; fetch('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 10000)">Spike</button>`+
-				`<button class="btn-cpu" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress?podName=%s&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU</button>`+
+			`<button class="btn-kill" data-on:click="@post('/api/chaos/kill-pod?podName=%s&namespace=%s')">Kill</button>`+
+			`<button class="btn-latency" onclick="this.disabled=true; fetch('/api/chaos/inject-latency?podName=%s&namespace=%s&seconds=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 5000)">+%ds</button>`+
+			`<button class="btn-spike" onclick="this.disabled=true; fetch('/api/chaos/memory-spike?podName=%s&namespace=%s&megabytes=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, 10000)">Spike</button>`+
+			`<button class="btn-cpu" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress?podName=%s&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU</button>`+
 			`</td>`+
 			`</tr>`,
 		cssClass,
@@ -133,11 +133,9 @@ func formatAge(t time.Time) string {
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
-func RenderHPAPanel(hpas []k8s.HPAInfo) string {
+func RenderHPAContent(hpas []k8s.HPAInfo) string {
 	var b strings.Builder
-	b.WriteString(`<div id="hpa-panel" class="policy-panel">`)
-	b.WriteString(`<h2>Horizontal Pod Autoscaler</h2>`)
-
+	b.WriteString(`<div id="hpa-content">`)
 	if len(hpas) == 0 {
 		b.WriteString(`<p class="empty">No HPA found</p>`)
 	} else {
@@ -145,8 +143,16 @@ func RenderHPAPanel(hpas []k8s.HPAInfo) string {
 			b.WriteString(renderHPACard(h))
 		}
 	}
-
 	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func RenderHPAPanel(hpas []k8s.HPAInfo) string {
+	var b strings.Builder
+	b.WriteString(`<details id="hpa-panel" class="policy-panel" open>`)
+	b.WriteString(`<summary><h2>Horizontal Pod Autoscaler</h2></summary>`)
+	b.WriteString(RenderHPAContent(hpas))
+	b.WriteString(`</details>`)
 	return b.String()
 }
 
@@ -193,24 +199,21 @@ func renderHPACard(h k8s.HPAInfo) string {
 
 	b.WriteString(fmt.Sprintf(`<button class="btn-apply" data-on:click="@post('/api/chaos/set-hpa?hpaName=%s&namespace=%s&minReplicas=' + document.getElementById('hpa-%s-min').value + '&maxReplicas=' + document.getElementById('hpa-%s-max').value + '&targetCPU=' + document.getElementById('hpa-%s-cpu').value)">Apply</button>`,
 		name, namespace, name, name, name))
-	
+
 	b.WriteString(`<div class="stress-controls">`)
 	b.WriteString(fmt.Sprintf(`<button class="btn-cpu-stress" onclick="this.disabled=true; fetch('/api/chaos/cpu-stress-all?deployment=podinfo&namespace=%s&duration=%d', {method:'POST'}); setTimeout(()=>{this.disabled=false;}, %d000)">CPU Stress (all pods)</button>`,
 		namespace, config.DefaultCPUDuration, config.DefaultCPUDuration))
 	b.WriteString(`</div>`)
-	
+
 	b.WriteString(`</div>`)
 	b.WriteString(`</div>`)
 
 	return b.String()
 }
 
-func RenderPDBPanel(pdbs []k8s.PDBInfo) string {
+func RenderPDBContent(pdbs []k8s.PDBInfo) string {
 	var b strings.Builder
-	b.WriteString(`<div id="pdb-panel" class="policy-panel">`)
-	b.WriteString(`<h2>Pod Disruption Budget</h2>`)
-	
-	// Add Rolling Update button at panel level
+	b.WriteString(`<div id="pdb-content">`)
 	b.WriteString(`<div class="policy-controls">`)
 	b.WriteString(`<button class="btn-rolling-update" data-on:click="@post('/api/chaos/rolling-update?deployment=podinfo&namespace=default')">Rolling Update (podinfo)</button>`)
 	b.WriteString(`</div>`)
@@ -224,6 +227,15 @@ func RenderPDBPanel(pdbs []k8s.PDBInfo) string {
 	}
 
 	b.WriteString(`</div>`)
+	return b.String()
+}
+
+func RenderPDBPanel(pdbs []k8s.PDBInfo) string {
+	var b strings.Builder
+	b.WriteString(`<details id="pdb-panel" class="policy-panel" open>`)
+	b.WriteString(`<summary><h2>Pod Disruption Budget</h2></summary>`)
+	b.WriteString(RenderPDBContent(pdbs))
+	b.WriteString(`</details>`)
 	return b.String()
 }
 
@@ -266,7 +278,7 @@ func RenderMetricsPanel(history metrics.MetricsHistory, gen *metrics.Generator) 
 	var b strings.Builder
 	b.WriteString(`<div id="metrics-panel">`)
 	b.WriteString(`<h2>Metrics</h2>`)
-	
+
 	// Show window and SLO info with editable SLO
 	slo := gen.SLO()
 	b.WriteString(`<div class="metrics-info">`)
@@ -276,7 +288,7 @@ func RenderMetricsPanel(history metrics.MetricsHistory, gen *metrics.Generator) 
 	b.WriteString(fmt.Sprintf(` <button class="btn-apply-small" data-on:click="@post('/api/chaos/set-slo?slo=' + document.getElementById('slo-input').value)">Apply</button>`))
 	b.WriteString(`</span>`)
 	b.WriteString(`</div>`)
-	
+
 	b.WriteString(`<div class="metrics-grid">`)
 
 	if len(history.Timestamps) == 0 {
@@ -404,19 +416,16 @@ func valueToY(value, minY, maxY float64, padding, chartHeight int) int {
 }
 
 func getLineColor(value float64, thresholds []metrics.Threshold, title string) string {
-	// For error budget, higher is better (inverse logic)
-	// Thresholds: Healthy=50 (green), Warning=20 (yellow), Critical=0 (red)
 	if strings.Contains(title, "Budget") {
 		if value >= thresholds[0].Value {
-			return thresholds[0].Color // green (>=50)
+			return thresholds[0].Color
 		}
 		if value >= thresholds[1].Value {
-			return thresholds[1].Color // yellow (>=20)
+			return thresholds[1].Color
 		}
-		return thresholds[2].Color // red (<20)
+		return thresholds[2].Color
 	}
 
-	// For latency and error rate, higher is worse
 	for _, t := range thresholds {
 		if value < t.Value {
 			return t.Color
@@ -427,14 +436,12 @@ func getLineColor(value float64, thresholds []metrics.Threshold, title string) s
 
 func renderColorZones(b *strings.Builder, thresholds []metrics.Threshold,
 	padding, chartWidth, chartHeight int, minY, maxY float64, inverted bool) {
-	// Sort thresholds by value
 	sorted := make([]metrics.Threshold, len(thresholds))
 	copy(sorted, thresholds)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Value < sorted[j].Value
 	})
 
-	// Render zones between thresholds
 	prevValue := minY
 	for _, t := range sorted {
 		if t.Value > prevValue && t.Value <= maxY {
@@ -446,12 +453,9 @@ func renderColorZones(b *strings.Builder, thresholds []metrics.Threshold,
 		}
 	}
 
-	// Last zone to maxY
 	if prevValue < maxY {
 		y1 := valueToY(maxY, minY, maxY, padding, chartHeight)
 		y2 := valueToY(prevValue, minY, maxY, padding, chartHeight)
-		// For inverted metrics (error budget), higher is better → use last threshold color (green)
-		// For normal metrics (latency, error rate), higher is worse → use red
 		lastColor := "#dc3545"
 		if inverted {
 			lastColor = sorted[len(sorted)-1].Color

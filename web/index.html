@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="/static/style.css">
     <script type="module" src="/static/datastar.js"></script>
 </head>
+
 <body>
     <header>
         <h1>kube-chaos-sim</h1>
@@ -17,15 +19,15 @@
         <div id="metrics-panel">
             <p class="loading">Loading metrics...</p>
         </div>
-        
+
         <div id="pod-grid">
             <p class="loading">Loading pod data...</p>
         </div>
-        
+
         <div id="hpa-panel">
             <p class="loading">Loading HPA data...</p>
         </div>
-        
+
         <div id="pdb-panel">
             <p class="loading">Loading PDB data...</p>
         </div>
@@ -40,5 +42,117 @@
         Connects to /events endpoint which pushes updates when pod state changes.
     -->
     <div id="sse-bootstrap" data-init="@get('/events')"></div>
+
+    <script>
+        // Collapsible panels state management
+        (function () {
+            const STORAGE_KEY = 'panel-states';
+            let userToggleInProgress = false;
+            let userToggleTimeout = null;
+
+            // Load saved states from localStorage
+            function loadStates() {
+                try {
+                    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+                } catch {
+                    return {};
+                }
+            }
+
+            // Save states to localStorage
+            function saveStates() {
+                const states = {};
+                document.querySelectorAll('details.policy-panel').forEach(details => {
+                    states[details.id] = details.open;
+                });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(states));
+            }
+
+            // Apply saved states to panels
+            function applyStates() {
+                const states = loadStates();
+                document.querySelectorAll('details.policy-panel').forEach(details => {
+                    // Default to open if no saved state
+                    const shouldBeOpen = states[details.id] !== false;
+                    // Only change if different to avoid infinite MutationObserver loop
+                    if (details.open !== shouldBeOpen) {
+                        details.open = shouldBeOpen;
+                    }
+                });
+            }
+
+            // Initialize on page load
+            applyStates();
+
+            function markUserToggle() {
+                userToggleInProgress = true;
+                if (userToggleTimeout) clearTimeout(userToggleTimeout);
+                userToggleTimeout = setTimeout(() => {
+                    userToggleInProgress = false;
+                }, 200);
+            }
+
+            // Track mouse/pointer clicks on summary
+            document.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('details.policy-panel > summary')) {
+                    markUserToggle();
+                }
+            }, true);
+
+            // Track keyboard space/enter on summary
+            document.addEventListener('keydown', (e) => {
+                if ((e.key === ' ' || e.key === 'Enter') && e.target.closest('details.policy-panel > summary')) {
+                    markUserToggle();
+                }
+            }, true);
+
+            // Save state ONLY after user toggles a panel
+            document.addEventListener('toggle', (e) => {
+                if (e.target.matches('details.policy-panel') && userToggleInProgress) {
+                    saveStates();
+                }
+            }, true);
+
+            // Watch for SSE updates that replace panels or change 'open' attribute
+            let applyTimeout = null;
+            const observer = new MutationObserver((mutations) => {
+                // Ignore mutations caused by user interactions
+                if (userToggleInProgress) return;
+
+                let needsApply = false;
+                mutations.forEach(mutation => {
+                    // Watch for element replacement (Datastar replaces DOM nodes)
+                    if (mutation.type === 'childList') {
+                        mutation.addedNodes.forEach(node => {
+                            if (node.nodeType === 1 && node.matches && node.matches('details.policy-panel')) {
+                                needsApply = true;
+                            }
+                        });
+                    }
+                    // Watch for 'open' attribute changes from SSE updates
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'open') {
+                        const details = mutation.target;
+                        if (details.matches && details.matches('details.policy-panel')) {
+                            needsApply = true;
+                        }
+                    }
+                });
+                if (needsApply) {
+                    if (applyTimeout) clearTimeout(applyTimeout);
+                    applyTimeout = setTimeout(() => {
+                        applyStates();
+                    }, 10);
+                }
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['open']
+            });
+        })();
+    </script>
 </body>
+
 </html>

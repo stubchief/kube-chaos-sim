@@ -1,0 +1,103 @@
+name: Destroy Yandex Cloud Infrastructure
+
+on:
+  workflow_dispatch: # только ручной запуск
+
+env:
+  YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+  YC_KEY_JSON: ${{ secrets.YC_KEY_JSON }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: production # required reviewer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /tmp/yc -n
+          echo "/tmp/yc/bin" >> $GITHUB_PATH
+
+      - name: Configure YC CLI
+        env:
+          KEY_JSON: ${{ secrets.YC_KEY_JSON }}
+        run: |
+          # Use printf instead of echo to preserve JSON structure (multiline private key)
+          printf '%s' "$KEY_JSON" > /tmp/key.json
+          yc config profile create ci || true
+          yc config set service-account-key /tmp/key.json
+          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+
+      - name: Get CI service account ID
+        id: ci-sa
+        run: |
+          # Look up the CI service account ID (created manually during bootstrap)
+          CI_SA_ID=$(yc iam service-account get kube-chaos-sim-ci --format json | jq -r '.id')
+          echo "ci_sa_id=$CI_SA_ID" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+        working-directory: terraform
+
+      - name: Remove CI service account from state (one-time migration)
+        run: |
+          # CI SA is now created manually, not by Terraform
+          # Remove it from state so Terraform doesn't try to delete it
+          # This step is safe to run multiple times (will fail silently if resource not in state)
+          terraform state rm yandex_iam_service_account.ci 2>/dev/null || true
+        working-directory: terraform
+
+      - name: Get kubeconfig (for cleanup)
+        run: |
+          cd terraform
+          # Try to get cluster ID from state (may fail if cluster doesn't exist)
+          CLUSTER_ID=$(terraform output -raw cluster_id 2>/dev/null || echo "")
+          if [ -n "$CLUSTER_ID" ]; then
+            yc managed-kubernetes cluster get-credentials --id $CLUSTER_ID --external || true
+            # Remove Helm releases first
+            helm uninstall kube-chaos-sim || true
+            helm uninstall podinfo || true
+          fi
+
+      - name: Delete all images from registry (required before destroy)
+        run: |
+          cd terraform
+          REGISTRY_ID=$(terraform output -raw registry_id 2>/dev/null || echo "")
+          if [ -z "$REGISTRY_ID" ]; then
+            echo "Registry ID not found in state, skipping image cleanup"
+            exit 0
+          fi
+
+          REPO_NAMES=$(yc container repository list --format json | \
+            jq -r --arg rid "$REGISTRY_ID" '.[] | select(.name | startswith($rid)) | .name')
+
+          if [ -z "$REPO_NAMES" ]; then
+            echo "No repositories found, skipping"
+            exit 0
+          fi
+
+          for REPO_NAME in $REPO_NAMES; do
+            IMAGE_IDS=$(yc container image list --repository-name "$REPO_NAME" --format json | jq -r '.[].id')
+            for IMAGE_ID in $IMAGE_IDS; do
+              echo "Deleting image $IMAGE_ID from $REPO_NAME"
+              yc container image delete --id "$IMAGE_ID"
+            done
+          done
+
+      - name: Terraform Destroy
+        run: |
+          terraform destroy -auto-approve \
+            -var="folder_id=${{ secrets.YC_FOLDER_ID }}" \
+            -var="ci_sa_id=${{ steps.ci-sa.outputs.ci_sa_id }}"
+        working-directory: terraform

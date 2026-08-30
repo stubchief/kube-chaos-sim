@@ -1,0 +1,20 @@
+# Cloud-specific overrides for Yandex Cloud deployment
+# Отличия от local (kind) конфигурации:
+# - Image из Yandex Container Registry (не локальный)
+# - Service type LoadBalancer (публичный доступ)
+# - pullPolicy Always (всегда тянуть свежий образ)
+
+image:
+  repository: cr.yandex/<REGISTRY_ID>/kube-chaos-sim # заменяется в CI
+  tag: latest
+  pullPolicy: Always
+
+# LoadBalancer для публичного доступа к dashboard
+# ВАЖНО: аутентификация сознательно не добавлена.
+# Кластер поднимается кратковременно для проверки и сразу сворачивается
+# через destroy.yml — это не постоянный публичный сервис.
+# Для production использования добавить Ingress + TLS + auth.
+service:
+  type: LoadBalancer
+  port: 8080
+  # nodePort не нужен для LoadBalancer

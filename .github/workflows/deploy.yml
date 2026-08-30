@@ -1,0 +1,121 @@
+name: Deploy to Yandex Cloud
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  YC_FOLDER_ID: ${{ secrets.YC_FOLDER_ID }}
+  YC_KEY_JSON: ${{ secrets.YC_KEY_JSON }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production # required reviewer before deployment
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /tmp/yc -n
+          echo "/tmp/yc/bin" >> $GITHUB_PATH
+
+      - name: Configure YC CLI
+        env:
+          KEY_JSON: ${{ secrets.YC_KEY_JSON }}
+        run: |
+          # Use printf instead of echo to preserve JSON structure (multiline private key)
+          printf '%s' "$KEY_JSON" > /tmp/key.json
+          yc config profile create ci || true
+          yc config set service-account-key /tmp/key.json
+          yc config set folder-id ${{ secrets.YC_FOLDER_ID }}
+
+      - name: Get CI service account ID
+        id: ci-sa
+        run: |
+          # Look up the CI service account ID (created manually during bootstrap)
+          CI_SA_ID=$(yc iam service-account get kube-chaos-sim-ci --format json | jq -r '.id')
+          echo "ci_sa_id=$CI_SA_ID" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}"
+        working-directory: terraform
+
+      - name: Remove CI service account from state (one-time migration)
+        run: |
+          # CI SA is now created manually, not by Terraform
+          # Remove it from state so Terraform doesn't try to delete it
+          # This step is safe to run multiple times (will fail silently if resource not in state)
+          terraform state rm yandex_iam_service_account.ci 2>/dev/null || true
+        working-directory: terraform
+
+      - name: Terraform Apply
+        id: tf-apply
+        run: |
+          terraform apply -auto-approve \
+            -var="folder_id=${{ secrets.YC_FOLDER_ID }}" \
+            -var="ci_sa_id=${{ steps.ci-sa.outputs.ci_sa_id }}"
+          # Export registry_id for subsequent steps
+          echo "registry_id=$(terraform output -raw registry_id)" >> $GITHUB_OUTPUT
+          echo "registry_url=$(terraform output -raw registry_url)" >> $GITHUB_OUTPUT
+        working-directory: terraform
+
+      - name: Login to Yandex Container Registry
+        run: |
+          # yc CLI is already configured by "Configure YC CLI" step above
+          # Try credential helper first, fallback to explicit docker login if it fails
+          if ! yc container registry configure-docker 2>/dev/null; then
+            echo "Credential helper failed, using explicit docker login..."
+            echo $(yc iam create-token) | docker login --username iam --password-stdin cr.yandex
+          fi
+
+      - name: Build and push Docker image
+        run: |
+          REGISTRY_URL="${{ steps.tf-apply.outputs.registry_url }}"
+          docker build -t $REGISTRY_URL/kube-chaos-sim:${{ github.sha }} .
+          docker push $REGISTRY_URL/kube-chaos-sim:${{ github.sha }}
+          # Also tag as latest
+          docker tag $REGISTRY_URL/kube-chaos-sim:${{ github.sha }} $REGISTRY_URL/kube-chaos-sim:latest
+          docker push $REGISTRY_URL/kube-chaos-sim:latest
+
+      - name: Get kubeconfig
+        run: |
+          cd terraform
+          CLUSTER_ID=$(terraform output -raw cluster_id)
+          yc managed-kubernetes cluster get-credentials --id $CLUSTER_ID --external
+
+      - name: Deploy podinfo (target microservice)
+        run: |
+          helm repo add podinfo https://stefanprodan.github.io/podinfo
+          helm repo update
+          helm upgrade --install podinfo podinfo/podinfo -f helm/podinfo-values.yaml
+
+      - name: Deploy kube-chaos-sim backend
+        run: |
+          REGISTRY_URL="${{ steps.tf-apply.outputs.registry_url }}"
+          helm upgrade --install kube-chaos-sim helm/kube-chaos-sim \
+            -f helm/kube-chaos-sim/values-cloud.yaml \
+            --set image.repository=$REGISTRY_URL/kube-chaos-sim \
+            --set image.tag=${{ github.sha }}
+
+      - name: Wait for deployments
+        run: |
+          kubectl rollout status deployment/podinfo --timeout=180s
+          kubectl rollout status deployment/kube-chaos-sim --timeout=180s
+
+      - name: Get dashboard URL
+        run: |
+          echo "Dashboard is being deployed..."
+          echo "Wait for LoadBalancer to get external IP:"
+          kubectl get svc kube-chaos-sim -o jsonpath='{.status.loadBalancer.ingress[0].ip}'

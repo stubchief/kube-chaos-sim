@@ -1,5 +1,11 @@
 .clinerules/
-server
-chaos-server
+/server
+/chaos-server
 mainserver.log
-main
+/main
+
+# Terraform artifacts
+*.tfvars
+.terraform/
+terraform.tfstate*
+key.json

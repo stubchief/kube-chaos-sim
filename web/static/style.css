@@ -516,3 +516,24 @@ button:disabled {
 button:disabled:hover {
     background: #adb5bd !important;
 }
+
+/* Collapsible panels (details/summary) */
+.policy-panel {
+    cursor: default;
+}
+
+.policy-panel summary {
+    cursor: pointer;
+    user-select: none;
+    padding: 0.5rem 0;
+    list-style-position: outside;
+}
+
+.policy-panel summary::-webkit-details-marker {
+    margin-right: 0.5rem;
+}
+
+.policy-panel summary h2 {
+    display: inline;
+    vertical-align: middle;
+}
